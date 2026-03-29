@@ -290,8 +290,8 @@
   <div class="modal-box">
     <div class="modal-title">Escanear código EAN</div>
     <p class="modal-hint">Centra el código de barras en la cámara</p>
-    <video id="videoEl" autoplay playsinline muted></video>
-    <button class="btn btn-primary" onclick="closeCamera()">Cerrar cámara</button>
+    <div id="qr-reader" style="width:100%;border-radius:10px;overflow:hidden;"></div>
+    <button class="btn btn-primary" style="margin-top:16px;" onclick="closeCamera()">Cerrar cámara</button>
   </div>
 </div>
 
@@ -514,30 +514,62 @@ function newOrder() {
 }
 
 // CAMERA
+let html5QrScanner = null;
+
 async function openCamera() {
   document.getElementById('cameraModal').classList.add('open');
-  try {
-    cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280}}});
-    document.getElementById('videoEl').srcObject=cameraStream;
-    startDetection();
-  } catch(e) { showToast('No se pudo acceder a la cámara','err'); document.getElementById('cameraModal').classList.remove('open'); }
+
+  if(typeof Html5Qrcode === 'undefined') {
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+    s.onload = () => startHtml5Scanner();
+    s.onerror = () => { showToast('No se pudo cargar el escáner','err'); closeCamera(); };
+    document.head.appendChild(s);
+  } else {
+    startHtml5Scanner();
+  }
+}
+
+function startHtml5Scanner() {
+  // Clear previous instance
+  const container = document.getElementById('qr-reader');
+  container.innerHTML = '';
+
+  html5QrScanner = new Html5Qrcode('qr-reader');
+  html5QrScanner.start(
+    { facingMode: 'environment' },
+    { fps: 10, qrbox: { width: 250, height: 150 }, aspectRatio: 1.5,
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.CODE_39,
+      ]
+    },
+    (decodedText) => {
+      closeCamera();
+      document.getElementById('barcodeInput').value = decodedText;
+      processBarcode();
+    },
+    () => {} // ignore scan failures
+  ).catch(err => {
+    showToast('No se pudo acceder a la cámara', 'err');
+    closeCamera();
+  });
 }
 
 function closeCamera() {
   document.getElementById('cameraModal').classList.remove('open');
+  if(html5QrScanner) {
+    html5QrScanner.stop().catch(()=>{});
+    html5QrScanner = null;
+  }
   if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null;}
   if(barcodeInterval){clearInterval(barcodeInterval);barcodeInterval=null;}
 }
 
-function startDetection() {
-  if(!('BarcodeDetector' in window)){ showToast('Escribe el código manualmente en este dispositivo','warn'); closeCamera(); return; }
-  const det=new BarcodeDetector({formats:['ean_13','ean_8','code_128','upc_a','upc_e','code_39','itf']});
-  const vid=document.getElementById('videoEl');
-  barcodeInterval=setInterval(async()=>{
-    if(!cameraStream) return;
-    try { const codes=await det.detect(vid); if(codes.length>0){closeCamera();document.getElementById('barcodeInput').value=codes[0].rawValue;processBarcode();} } catch(e){}
-  },350);
-}
+
 
 function showScreen(id) { document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById(id).classList.add('active'); window.scrollTo(0,0); }
 
