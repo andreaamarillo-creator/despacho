@@ -281,7 +281,8 @@
     <h4>⚠️ Referencias con faltantes</h4>
     <div id="missingBody"></div>
   </div>
-  <button class="btn btn-primary" onclick="newOrder()">Nuevo despacho</button>
+  <button class="btn btn-primary" onclick="exportExcel()">📥 Descargar reporte Excel</button>
+  <button class="btn btn-ghost" onclick="newOrder()">Nuevo despacho</button>
   <button class="btn btn-ghost" onclick="window.print()">🖨️ Imprimir comprobante</button>
 </div>
 
@@ -511,6 +512,32 @@ function newOrder() {
   document.getElementById('globalBadge').className='status-badge idle';
   document.getElementById('globalBadge').textContent='En espera';
   showScreen('screen-upload');
+}
+
+
+function exportExcel() {
+  if(typeof XLSX === 'undefined'){ showToast('Cargando...','warn'); return; }
+  const now = new Date();
+  const wb = XLSX.utils.book_new();
+  const rows = [
+    ['Tienda', 'Fecha Pedido', 'Fecha Cierre', 'Hora Cierre'],
+    [storeName, orderDate, now.toLocaleDateString('es-CO'), now.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})],
+    [],
+    ['EAN', 'Nombre Referencia', 'Cantidad Pedida', 'Cantidad Escaneada', 'Faltantes', 'Estado']
+  ];
+  orderItems.forEach(it => {
+    const faltantes = Math.max(0, it.qty - it.scanned);
+    const estado = it.scanned >= it.qty ? 'COMPLETO' : it.scanned > 0 ? 'PARCIAL' : 'FALTANTE';
+    rows.push([it.ean, it.name, it.qty, it.scanned, faltantes, estado]);
+  });
+  rows.push([]);
+  rows.push(['', '', 'TOTAL UNIDADES', orderItems.reduce((s,i)=>s+i.scanned,0), orderItems.reduce((s,i)=>s+Math.max(0,i.qty-i.scanned),0), '']);
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:18},{wch:40},{wch:16},{wch:18},{wch:12},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Despacho');
+  const fecha = now.toLocaleDateString('es-CO').replace(/\//g,'-');
+  XLSX.writeFile(wb, `Despacho_${storeName}_${fecha}.xlsx`);
+  showToast('✅ Excel descargado','ok');
 }
 
 // CAMERA
