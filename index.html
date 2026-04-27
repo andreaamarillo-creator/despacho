@@ -451,17 +451,33 @@ function startScan(store) {
 
 // ── SCAN INPUT ──
 var scanTimer = null;
+var lastEan = '';
+var lastEanTime = 0;
+
 document.getElementById('scanInp').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') {
     var v = e.target.value.trim();
-    if (v) { processEan(v); e.target.value = ''; }
+    e.target.value = '';
+    if (!v) return;
+    var now = Date.now();
+    if (v === lastEan && now - lastEanTime < 800) return; // debounce duplicates
+    lastEan = v;
+    lastEanTime = now;
+    processEan(v);
   }
 });
 document.getElementById('scanInp').addEventListener('input', function(e) {
   clearTimeout(scanTimer);
   var v = e.target.value.trim();
   scanTimer = setTimeout(function() {
-    if (/^\d{8}$|^\d{12,14}$/.test(v)) { processEan(v); e.target.value = ''; }
+    if (/^\d{8}$|^\d{12,14}$/.test(v)) {
+      var now = Date.now();
+      if (v === lastEan && now - lastEanTime < 800) { e.target.value = ''; return; }
+      lastEan = v;
+      lastEanTime = now;
+      processEan(v);
+      e.target.value = '';
+    }
   }, 80);
 });
 
